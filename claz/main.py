@@ -27,11 +27,16 @@ def timesheet_path(project, month):
     
 def load_timesheet(project, month):
     this_dir = os.path.dirname(os.path.abspath(__file__))
-    timesheet_dir = os.path.join(this_dir, '..', 'timesheets', project)
+    timesheet_dir = os.path.join(this_dir, '..', 'timesheets')
     if not os.path.isdir(timesheet_dir):
-        print(f'Creating new timesheet directory timesheets/{project}.')
+        print(f'Creating new timesheet directory at {timesheet_dir}.')
         os.mkdir(timesheet_dir)
-    timesheet_path = os.path.join(timesheet_dir, f'{month}.csv')
+    project_timesheet_dir = os.path.join(timesheet_dir, project)
+    if not os.path.isdir(project_timesheet_dir):
+        print('Creating new project timesheet directory at '
+              f'{project_timesheet_dir}.')
+        os.mkdir(project_timesheet_dir)
+    timesheet_path = os.path.join(project_timesheet_dir, f'{month}.csv')
     try:
         timesheet = pd.read_csv(timesheet_path)
     except FileNotFoundError:

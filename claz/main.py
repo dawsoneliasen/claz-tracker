@@ -104,7 +104,7 @@ def report(timesheet):
 
 
 def edit(timesheet_path):
-    os.system(f'{EDITOR} {timesheet_path}')
+    return os.system(f'{EDITOR} {timesheet_path}')
 
 
 def main():
@@ -132,6 +132,7 @@ def main():
     if op == 'report':
         report(timesheet)
     if op == 'edit':
-        edit(timesheet_path(project, current_month))
+        exit_code = edit(timesheet_path(project, current_month))
+        sys.exit(exit_code)
     # write the update timesheet
     save_timesheet(timesheet, project, current_month)

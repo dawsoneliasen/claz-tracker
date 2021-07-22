@@ -24,25 +24,38 @@ def timesheet_path(project, month):
     timesheet_dir = os.path.join(this_dir, '..', 'timesheets', project)
     timesheet_path = os.path.join(timesheet_dir, f'{month}.csv')
     return timesheet_path
-    
+
+
 def load_timesheet(project, month):
     this_dir = os.path.dirname(os.path.abspath(__file__))
     timesheet_dir = os.path.join(this_dir, '..', 'timesheets')
     if not os.path.isdir(timesheet_dir):
-        print(f'Creating new timesheet directory at {timesheet_dir}.')
-        os.mkdir(timesheet_dir)
+        prompt = f'Create new timesheet directory at {timesheet_dir}? [y/n] '
+        response = input(prompt)
+        if response == 'y':
+            os.mkdir(timesheet_dir)
+        else:
+            sys.exit(1)
     project_timesheet_dir = os.path.join(timesheet_dir, project)
     if not os.path.isdir(project_timesheet_dir):
-        print('Creating new project timesheet directory at '
-              f'{project_timesheet_dir}.')
-        os.mkdir(project_timesheet_dir)
+        prompt = ('Create new project timesheet directory at '
+                  f'{project_timesheet_dir}? [y/n] ')
+        response = input(prompt)
+        if response == 'y':
+            os.mkdir(project_timesheet_dir)
+        else:
+            sys.exit(1)
     timesheet_path = os.path.join(project_timesheet_dir, f'{month}.csv')
     try:
         timesheet = pd.read_csv(timesheet_path)
     except FileNotFoundError:
-        print(f'Timesheet not found for {month}. '
-              'A new timesheet will be created.')
-        timesheet = pd.DataFrame(columns=['date', 'start', 'stop'])
+        prompt = (f'Timesheet not found for {month}. '
+                  'Create new timesheet? [y/n] ')
+        response = input(prompt)
+        if response == 'y':
+            timesheet = pd.DataFrame(columns=['date', 'start', 'stop'])
+        else:
+            sys.exit(1)
     return timesheet
 
 
@@ -50,8 +63,12 @@ def save_timesheet(timesheet, project, month):
     this_dir = os.path.dirname(os.path.abspath(__file__))
     timesheet_dir = os.path.join(this_dir, '..', 'timesheets', project)
     if not os.path.isdir(timesheet_dir):
-        print(f'Creating new timesheet directory timesheets/{project}.')
-        os.mkdir(timesheet_dir)
+        prompt = f'Create new timesheet directory timesheets/{project}? [y/n] '
+        response = input(prompt)
+        if response == 'y':
+            os.mkdir(timesheet_dir)
+        else:
+            sys.exit(1)
     timesheet_path = os.path.join(timesheet_dir, f'{month}.csv')
     timesheet.to_csv(timesheet_path, index=False)
 

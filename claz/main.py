@@ -15,9 +15,36 @@ import pandas as pd
 EDITOR = os.environ.get('EDITOR', 'vim')
 
 IN_PROGRESS_FLAG = 'IN PROGRESS'
-DATE_FORMAT = '%m/%d'
+DATE_FORMAT = '%Y-%m-%d'
 TIME_FORMAT = '%H:%M'
 
+
+def print_header(msg):
+    """Print a message in bold."""
+    bold = '\033[1m'
+    reset_bold = '\033[0m'
+    print(f'{bold}{msg}{reset_bold}')
+
+
+def print_okay(msg):
+    """Print a message in green."""
+    green = '\033[92m'
+    reset_color = '\033[0m'
+    print(f'{green}{msg}{reset_color}')
+
+
+def print_error(msg):
+    """Print a message in red."""
+    red = '\033[91m'
+    reset_color = '\033[0m'
+    print(f'{red}{msg}{reset_color}')
+
+
+def print_warning(msg):
+    """Print a message in yellow."""
+    yellow = '\033[93m'
+    reset_color = '\033[0m'
+    print(f'{yellow}{msg}{reset_color}')
 
 def timesheet_path(project, month):
     this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -76,9 +103,10 @@ def save_timesheet(timesheet, project, month):
 def new_session(timesheet, start_time):
     timesheet = timesheet.copy()
     if IN_PROGRESS_FLAG in timesheet['stop'].to_list():
-        print('There is an unfinished session.')
-        print('Run claz stop to end the session now '
-              'or edit the timesheet to fix missed session stop.')
+        msg = ('There is an unfinished session.\n'
+               'Run claz stop to end the session now '
+               'or edit the timesheet to fix missed session stop.')
+        print_error(msg)
         sys.exit(1)
     new_row = {'date': start_time.strftime(DATE_FORMAT),
                'start': start_time.strftime(TIME_FORMAT),
@@ -90,7 +118,7 @@ def new_session(timesheet, start_time):
 def end_session(timesheet, stop_time):
     timesheet = timesheet.copy()
     if IN_PROGRESS_FLAG not in timesheet['stop'].to_list():
-        print('There is no session in progress.')
+        print_error('There is no session in progress.')
         sys.exit(1)
     in_progress_row = (timesheet['stop'] == IN_PROGRESS_FLAG)
     timesheet.loc[in_progress_row, 'stop'] = stop_time.strftime(TIME_FORMAT)
@@ -103,24 +131,31 @@ def end_session(timesheet, stop_time):
         TIME_FORMAT
     )
     duration = session_stop - session_start
-    print(f'Session duration: {duration.seconds / 3600:.2f} hours.')
+    print_okay(f'Session duration: {duration.seconds / 3600:.2f} hours.')
     return timesheet
 
 
-def report(timesheet):
+def report(project, timesheet):
+    print_header(project)
     if IN_PROGRESS_FLAG in timesheet['stop'].to_list():
-        print('An unfinished session will be ignored.')
-        print('Run claz stop to end the session now '
-              'or edit the timesheet to fix missed session stop.')
+        msg = ('An unfinished session will be ignored.\n'
+               'Run claz stop to end the session now '
+               'or edit the timesheet to fix missed session stop.')
+        print_warning(msg)
         timesheet = timesheet[timesheet['stop'] != IN_PROGRESS_FLAG]
-    format = '%H:%M'
-    diff = (pd.to_datetime(timesheet['stop'], format=format) -
-            pd.to_datetime(timesheet['start'], format=format))
-    month_total = diff.sum()
-    week_total = diff.iloc[-7:].sum()
+    diff = timesheet.copy()
+    diff['date'] = pd.to_datetime(timesheet['date'], format=DATE_FORMAT)
+    diff = diff.set_index('date')
+    diff = (pd.to_datetime(diff['stop'], format=TIME_FORMAT) -
+            pd.to_datetime(diff['start'], format=TIME_FORMAT))
+    daily = diff.groupby(pd.Grouper(freq='D')).sum()
+    weekly = diff.groupby(pd.Grouper(freq='7D')).sum()
+    month_total = daily.sum()
+    oneweekago = dt.date.today() - dt.timedelta(days=7)
+    week_total = daily.loc[oneweekago:dt.date.today()].sum()
     print(f'{month_total.days * 24 + month_total.seconds / 3600:.2f} '
           'hours this month.')
-    print(f'{week_total.days * 24 + week_total.seconds / 3600:.2f} '
+    print(f'{(week_total.days * 24) + (week_total.seconds / 3600):.2f} '
           'hours this week.')
     # TODO: describe the time split between projects this month
 
@@ -151,8 +186,9 @@ def main():
         timesheet = new_session(timesheet, now)
     if op == 'stop':
         timesheet = end_session(timesheet, now)
+        report(project, timesheet)
     if op == 'report':
-        report(timesheet)
+        report(project, timesheet)
     if op == 'edit':
         exit_code = edit(timesheet_path(project, current_month))
         sys.exit(exit_code)

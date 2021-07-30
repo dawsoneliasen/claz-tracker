@@ -46,14 +46,12 @@ def print_warning(msg):
     reset_color = '\033[0m'
     print(f'{yellow}{msg}{reset_color}')
 
-def timesheet_path(project, month):
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    timesheet_dir = os.path.join(this_dir, '..', 'timesheets', project)
-    timesheet_path = os.path.join(timesheet_dir, f'{month}.csv')
-    return timesheet_path
+
+def timestamp_to_hours(timestamp):
+    return (timestamp.days * 24) + (timestamp.seconds / 3600)
 
 
-def load_timesheet(project, month):
+def get_timesheet_dir():
     this_dir = os.path.dirname(os.path.abspath(__file__))
     timesheet_dir = os.path.join(this_dir, '..', 'timesheets')
     if not os.path.isdir(timesheet_dir):
@@ -63,6 +61,11 @@ def load_timesheet(project, month):
             os.mkdir(timesheet_dir)
         else:
             sys.exit(1)
+    return timesheet_dir
+
+
+def get_project_timesheet_dir(project):
+    timesheet_dir = get_timesheet_dir()
     project_timesheet_dir = os.path.join(timesheet_dir, project)
     if not os.path.isdir(project_timesheet_dir):
         prompt = ('Create new project timesheet directory at '
@@ -72,18 +75,35 @@ def load_timesheet(project, month):
             os.mkdir(project_timesheet_dir)
         else:
             sys.exit(1)
+    return project_timesheet_dir
+
+
+def get_timesheet_path(project, month):
+    project_timesheet_dir = get_project_timesheet_dir(project)
     timesheet_path = os.path.join(project_timesheet_dir, f'{month}.csv')
-    try:
-        timesheet = pd.read_csv(timesheet_path)
-    except FileNotFoundError:
-        prompt = (f'Timesheet not found for {month}. '
-                  'Create new timesheet? [y/n] ')
-        response = input(prompt)
-        if response == 'y':
-            timesheet = pd.DataFrame(columns=['date', 'start', 'stop'])
-        else:
-            sys.exit(1)
-    return timesheet
+    return timesheet_path
+
+
+def load_timesheet(project, month=None):
+    if month:
+        timesheet_path = get_timesheet_path(project, month)
+        try:
+            timesheet = pd.read_csv(timesheet_path)
+        except FileNotFoundError:
+            prompt = (f'Timesheet not found for {month}. '
+                      'Create new timesheet? [y/n] ')
+            response = input(prompt)
+            if response == 'y':
+                timesheet = pd.DataFrame(columns=['date', 'start', 'stop'])
+            else:
+                sys.exit(1)
+        return timesheet
+    else:
+        project_dir = get_project_timesheet_dir(project)
+        sheet_names = os.listdir(project_dir)
+        timesheets = [pd.read_csv(os.path.join(project_dir, t))
+                      for t in sheet_names]
+        return pd.concat(timesheets)
 
 
 def save_timesheet(timesheet, project, month):
@@ -135,29 +155,31 @@ def end_session(timesheet, stop_time):
     return timesheet
 
 
-def report(project, timesheet):
-    print_header(project)
+def report(project):
+    timesheet = load_timesheet(project)
     if IN_PROGRESS_FLAG in timesheet['stop'].to_list():
-        msg = ('An unfinished session will be ignored.\n'
-               'Run claz stop to end the session now '
-               'or edit the timesheet to fix missed session stop.')
-        print_warning(msg)
-        timesheet = timesheet[timesheet['stop'] != IN_PROGRESS_FLAG]
+        temp_stop_value = dt.datetime.now().strftime(TIME_FORMAT)
+        current_session_idx = timesheet['stop'] == IN_PROGRESS_FLAG
+        timesheet.loc[current_session_idx, 'stop'] = temp_stop_value
     diff = timesheet.copy()
     diff['date'] = pd.to_datetime(timesheet['date'], format=DATE_FORMAT)
     diff = diff.set_index('date')
     diff = (pd.to_datetime(diff['stop'], format=TIME_FORMAT) -
             pd.to_datetime(diff['start'], format=TIME_FORMAT))
-    daily = diff.groupby(pd.Grouper(freq='D')).sum()
-    weekly = diff.groupby(pd.Grouper(freq='7D')).sum()
+    daily = diff.groupby(pd.Grouper(freq='D')).sum().apply(timestamp_to_hours)
     month_total = daily.sum()
-    oneweekago = dt.date.today() - dt.timedelta(days=7)
+    today = dt.date.today()
+    today_week_idx = (today.weekday() + 1) % 7
+    oneweekago = today - dt.timedelta(days=6)
+    week_start = today - dt.timedelta(days=today_week_idx)
     week_total = daily.loc[oneweekago:dt.date.today()].sum()
-    print(f'{month_total.days * 24 + month_total.seconds / 3600:.2f} '
-          'hours this month.')
-    print(f'{(week_total.days * 24) + (week_total.seconds / 3600):.2f} '
-          'hours this week.')
-    # TODO: describe the time split between projects this month
+    week_sofar = daily.loc[week_start:dt.date.today()].sum()
+    week_total_90dayavg = daily.rolling(7).sum().iloc[:90].mean()
+    print(f'{month_total:.2f} hours so far this month.')
+    print(f'{week_total:.2f} hours in the past 7 days.')
+    print(f'{week_sofar:.2f} hours so far this week.')
+    print(f'You averaged {week_total_90dayavg:.2f} '
+          'hours/week in the past 90 days.')
 
 
 def edit(timesheet_path):
@@ -181,6 +203,8 @@ def main():
     current_month = now.strftime('%y-%m').lower()
     # open timesheet file
     timesheet = load_timesheet(project, current_month)
+    # print header
+    print_header(project + ': ' + now.strftime('%B %Y'))
     # perform operation
     if op == 'start':
         timesheet = new_session(timesheet, now)
@@ -188,9 +212,9 @@ def main():
         timesheet = end_session(timesheet, now)
         report(project, timesheet)
     if op == 'report':
-        report(project, timesheet)
+        report(project)
     if op == 'edit':
-        exit_code = edit(timesheet_path(project, current_month))
+        exit_code = edit(get_timesheet_path(project, current_month))
         sys.exit(exit_code)
     # write the update timesheet
     save_timesheet(timesheet, project, current_month)

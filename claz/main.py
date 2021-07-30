@@ -210,7 +210,7 @@ def main():
         timesheet = new_session(timesheet, now)
     if op == 'stop':
         timesheet = end_session(timesheet, now)
-        report(project, timesheet)
+        report(project)
     if op == 'report':
         report(project)
     if op == 'edit':

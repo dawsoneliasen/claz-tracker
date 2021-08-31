@@ -167,19 +167,22 @@ def report(project):
     diff = (pd.to_datetime(diff['stop'], format=TIME_FORMAT) -
             pd.to_datetime(diff['start'], format=TIME_FORMAT))
     daily = diff.groupby(pd.Grouper(freq='D')).sum().apply(timestamp_to_hours)
-    month_total = daily.sum()
     today = dt.date.today()
+    month_total = daily.loc[dt.date(today.year, today.month, 1):].sum()
     today_week_idx = (today.weekday() + 1) % 7
     oneweekago = today - dt.timedelta(days=6)
     week_start = today - dt.timedelta(days=today_week_idx)
-    week_total = daily.loc[oneweekago:dt.date.today()].sum()
-    week_sofar = daily.loc[week_start:dt.date.today()].sum()
+    week_total = daily.loc[oneweekago:today].sum()
+    week_sofar = daily.loc[week_start:today].sum()
     week_total_90dayavg = daily.rolling(7).sum().iloc[:90].mean()
     print(f'{month_total:.2f} hours so far this month.')
     print(f'{week_total:.2f} hours in the past 7 days.')
     print(f'{week_sofar:.2f} hours so far this week.')
     print(f'You averaged {week_total_90dayavg:.2f} '
           'hours/week in the past 90 days.')
+    today_datetime = dt.datetime(today.year, today.month, today.day)
+    if today_datetime in daily.index:
+        print(f'{daily.loc[today_datetime]:.2f} hours so far today.')
 
 
 def edit(timesheet_path):
